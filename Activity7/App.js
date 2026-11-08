@@ -9,14 +9,30 @@ import {
   StyleSheet,
   StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+const STORAGE_KEY = '@studyflow_tasks';
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState('');
 
-  // Add a task to the list
+  // Save tasks using AsyncStorage
+  const saveTasks = async (updatedTasks) => {
+    try {
+      await AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(updatedTasks)
+      );
+      setTasks(updatedTasks);
+    } catch (error) {
+      console.log('Save error:', error);
+    }
+  };
+
+  // Add and save a new task
   const addTask = () => {
     if (!title.trim()) return;
 
@@ -26,7 +42,7 @@ export default function App() {
       completed: false,
     };
 
-    setTasks([newTask, ...tasks]);
+    saveTasks([newTask, ...tasks]);
     setTitle('');
   };
 
@@ -78,27 +94,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F1F8F6',
-    padding: 18,
-  },
+  container: { flex: 1, backgroundColor: '#F1F8F6', padding: 18 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginVertical: 20,
   },
-  appName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#287D78',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#7C918C',
-    marginTop: 4,
-  },
+  appName: { fontSize: 28, fontWeight: 'bold', color: '#287D78' },
+  subtitle: { fontSize: 12, color: '#7C918C', marginTop: 4 },
   card: {
     backgroundColor: '#FFFFFF',
     padding: 16,
@@ -123,23 +127,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
+  buttonText: { color: '#FFFFFF', fontWeight: 'bold' },
   taskCard: {
     backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 12,
     marginBottom: 10,
   },
-  taskTitle: {
-    color: '#344B45',
-    fontSize: 14,
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#91A19B',
-    marginTop: 25,
-  },
+  taskTitle: { color: '#344B45', fontSize: 14 },
+  emptyText: { textAlign: 'center', color: '#91A19B', marginTop: 25 },
 });
