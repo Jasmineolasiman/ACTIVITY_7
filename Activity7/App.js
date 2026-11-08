@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   FlatList,
   StyleSheet,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,27 @@ const STORAGE_KEY = '@studyflow_tasks';
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  // Load saved tasks when the app starts
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  // Read tasks from local storage
+  const loadTasks = async () => {
+    try {
+      const savedData = await AsyncStorage.getItem(STORAGE_KEY);
+
+      if (savedData !== null) {
+        setTasks(JSON.parse(savedData));
+      }
+    } catch (error) {
+      console.log('Load error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Save tasks using AsyncStorage
   const saveTasks = async (updatedTasks) => {
@@ -76,18 +98,22 @@ export default function App() {
 
         <Text style={styles.heading}>My Tasks</Text>
 
-        <FlatList
-          data={tasks}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.taskCard}>
-              <Text style={styles.taskTitle}>{item.title}</Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No tasks added yet.</Text>
-          }
-        />
+        {loading ? (
+          <ActivityIndicator size="large" color="#287D78" />
+        ) : (
+          <FlatList
+            data={tasks}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.taskCard}>
+                <Text style={styles.taskTitle}>{item.title}</Text>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No saved tasks yet.</Text>
+            }
+          />
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
