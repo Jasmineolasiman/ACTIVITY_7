@@ -9,6 +9,7 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -19,53 +20,61 @@ const STORAGE_KEY = '@studyflow_tasks';
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Load saved tasks when the app starts
   useEffect(() => {
     loadTasks();
   }, []);
 
-  // Read tasks from local storage
+  // Load saved tasks
   const loadTasks = async () => {
     try {
       const savedData = await AsyncStorage.getItem(STORAGE_KEY);
-
       if (savedData !== null) {
-        setTasks(JSON.parse(savedData));
+        const parsedData = JSON.parse(savedData);
+        if (Array.isArray(parsedData)) setTasks(parsedData);
       }
     } catch (error) {
-      console.log('Load error:', error);
+      Alert.alert('Error', 'Unable to load saved tasks.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Save tasks using AsyncStorage
+  // Save task list to local storage
   const saveTasks = async (updatedTasks) => {
     try {
-      await AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updatedTasks)
-      );
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTasks));
       setTasks(updatedTasks);
+      return true;
     } catch (error) {
-      console.log('Save error:', error);
+      Alert.alert('Error', 'Unable to save tasks.');
+      return false;
     }
   };
 
-  // Add and save a new task
-  const addTask = () => {
-    if (!title.trim()) return;
+  // Create a new task
+  const addTask = async () => {
+    if (!title.trim()) {
+      Alert.alert('Missing Title', 'Please enter a task title.');
+      return;
+    }
 
     const newTask = {
       id: Date.now().toString(),
       title: title.trim(),
+      description: description.trim(),
       completed: false,
+      createdAt: new Date().toLocaleDateString(),
     };
 
-    saveTasks([newTask, ...tasks]);
-    setTitle('');
+    const success = await saveTasks([newTask, ...tasks]);
+
+    if (success) {
+      setTitle('');
+      setDescription('');
+    }
   };
 
   return (
@@ -91,7 +100,16 @@ export default function App() {
             onChangeText={setTitle}
           />
 
+          <TextInput
+            style={[styles.input, styles.descriptionInput]}
+            placeholder="Add a short description"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+          />
+
           <TouchableOpacity style={styles.button} onPress={addTask}>
+            <Ionicons name="add-circle-outline" size={19} color="#FFFFFF" />
             <Text style={styles.buttonText}>Add Task</Text>
           </TouchableOpacity>
         </View>
@@ -107,6 +125,8 @@ export default function App() {
             renderItem={({ item }) => (
               <View style={styles.taskCard}>
                 <Text style={styles.taskTitle}>{item.title}</Text>
+                <Text style={styles.taskDescription}>{item.description}</Text>
+                <Text style={styles.taskDate}>Added: {item.createdAt}</Text>
               </View>
             )}
             ListEmptyComponent={
@@ -146,12 +166,17 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     marginBottom: 10,
+    color: '#344B45',
   },
+  descriptionInput: { minHeight: 65, textAlignVertical: 'top' },
   button: {
     backgroundColor: '#287D78',
     padding: 13,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
   },
   buttonText: { color: '#FFFFFF', fontWeight: 'bold' },
   taskCard: {
@@ -160,6 +185,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
   },
-  taskTitle: { color: '#344B45', fontSize: 14 },
+  taskTitle: { color: '#344B45', fontSize: 15, fontWeight: 'bold' },
+  taskDescription: { color: '#7C918C', fontSize: 12, marginTop: 5 },
+  taskDate: { color: '#A1AAA7', fontSize: 10, marginTop: 7 },
   emptyText: { textAlign: 'center', color: '#91A19B', marginTop: 25 },
 });
