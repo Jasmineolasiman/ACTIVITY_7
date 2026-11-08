@@ -21,6 +21,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,27 +55,79 @@ export default function App() {
     }
   };
 
-  // Create a new task
-  const addTask = async () => {
+  // Create or update a task
+  const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Missing Title', 'Please enter a task title.');
       return;
     }
 
-    const newTask = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      description: description.trim(),
-      completed: false,
-      createdAt: new Date().toLocaleDateString(),
-    };
+    let updatedTasks;
 
-    const success = await saveTasks([newTask, ...tasks]);
+    if (editingId) {
+      updatedTasks = tasks.map((task) =>
+        task.id === editingId
+          ? { ...task, title: title.trim(), description: description.trim() }
+          : task
+      );
+    } else {
+      const newTask = {
+        id: Date.now().toString(),
+        title: title.trim(),
+        description: description.trim(),
+        completed: false,
+        createdAt: new Date().toLocaleDateString(),
+      };
+
+      updatedTasks = [newTask, ...tasks];
+    }
+
+    const success = await saveTasks(updatedTasks);
 
     if (success) {
       setTitle('');
       setDescription('');
+      setEditingId(null);
     }
+  };
+
+  // Load task details for editing
+  const handleEdit = (task) => {
+    setTitle(task.title);
+    setDescription(task.description);
+    setEditingId(task.id);
+  };
+
+  // Delete a selected task
+  const handleDelete = (taskId) => {
+    Alert.alert('Delete Task', 'Do you want to delete this task?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const updatedTasks = tasks.filter((task) => task.id !== taskId);
+          const success = await saveTasks(updatedTasks);
+
+          if (success && editingId === taskId) {
+            setTitle('');
+            setDescription('');
+            setEditingId(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  // Mark a task as completed or pending
+  const toggleTask = async (taskId) => {
+    const updatedTasks = tasks.map((task) =>
+      task.id === taskId
+        ? { ...task, completed: !task.completed }
+        : task
+    );
+
+    await saveTasks(updatedTasks);
   };
 
   return (
@@ -91,7 +144,9 @@ export default function App() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.heading}>Add New Task</Text>
+          <Text style={styles.heading}>
+            {editingId ? 'Edit Your Task' : 'Add New Task'}
+          </Text>
 
           <TextInput
             style={styles.input}
@@ -108,10 +163,24 @@ export default function App() {
             multiline
           />
 
-          <TouchableOpacity style={styles.button} onPress={addTask}>
-            <Ionicons name="add-circle-outline" size={19} color="#FFFFFF" />
-            <Text style={styles.buttonText}>Add Task</Text>
+          <TouchableOpacity style={styles.button} onPress={handleSave}>
+            <Text style={styles.buttonText}>
+              {editingId ? 'Update Task' : 'Add Task'}
+            </Text>
           </TouchableOpacity>
+
+          {editingId && (
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setTitle('');
+                setDescription('');
+                setEditingId(null);
+              }}
+            >
+              <Text style={styles.cancelText}>Cancel Editing</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.heading}>My Tasks</Text>
@@ -124,9 +193,35 @@ export default function App() {
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <View style={styles.taskCard}>
-                <Text style={styles.taskTitle}>{item.title}</Text>
-                <Text style={styles.taskDescription}>{item.description}</Text>
-                <Text style={styles.taskDate}>Added: {item.createdAt}</Text>
+                <TouchableOpacity onPress={() => toggleTask(item.id)}>
+                  <Ionicons
+                    name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={25}
+                    color={item.completed ? '#287D78' : '#A6AAA9'}
+                  />
+                </TouchableOpacity>
+
+                <View style={styles.taskContent}>
+                  <Text
+                    style={[
+                      styles.taskTitle,
+                      item.completed && styles.completedText,
+                    ]}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text style={styles.taskDescription}>{item.description}</Text>
+
+                  <View style={styles.actions}>
+                    <TouchableOpacity onPress={() => handleEdit(item)}>
+                      <Text style={styles.editText}>Edit</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                      <Text style={styles.deleteText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
             )}
             ListEmptyComponent={
@@ -174,19 +269,25 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 7,
   },
   buttonText: { color: '#FFFFFF', fontWeight: 'bold' },
+  cancelButton: { padding: 10, alignItems: 'center' },
+  cancelText: { color: '#7C918C', fontWeight: 'bold' },
   taskCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
     backgroundColor: '#FFFFFF',
     padding: 15,
     borderRadius: 12,
     marginBottom: 10,
   },
+  taskContent: { flex: 1 },
   taskTitle: { color: '#344B45', fontSize: 15, fontWeight: 'bold' },
+  completedText: { textDecorationLine: 'line-through', color: '#9AA8A2' },
   taskDescription: { color: '#7C918C', fontSize: 12, marginTop: 5 },
-  taskDate: { color: '#A1AAA7', fontSize: 10, marginTop: 7 },
+  actions: { flexDirection: 'row', gap: 18, marginTop: 12 },
+  editText: { color: '#287D78', fontWeight: 'bold', fontSize: 12 },
+  deleteText: { color: '#D65B5B', fontWeight: 'bold', fontSize: 12 },
   emptyText: { textAlign: 'center', color: '#91A19B', marginTop: 25 },
 });
