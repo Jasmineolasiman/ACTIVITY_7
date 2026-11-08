@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,10 +30,34 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(25)).current;
+
   // Load saved tasks when the app starts
   useEffect(() => {
     loadTasks();
   }, []);
+
+  // Animate the app after loading
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 700,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [loading]);
 
   // Read tasks from local storage
   const loadTasks = async () => {
@@ -117,14 +143,14 @@ export default function App() {
     }
   };
 
-  // Load task details into the form for editing
+  // Load task details for editing
   const handleEdit = (task) => {
     setTitle(task.title);
     setDescription(task.description);
     setEditingId(task.id);
   };
 
-  // Delete a task
+  // Delete a selected task
   const handleDelete = (taskId) => {
     Alert.alert(
       'Delete Task',
@@ -174,7 +200,15 @@ export default function App() {
 
   // Display each task
   const renderTask = ({ item }) => (
-    <View style={styles.taskCard}>
+    <Animated.View
+      style={[
+        styles.taskCard,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
       <TouchableOpacity
         style={styles.checkButton}
         onPress={() => handleToggle(item.id)}
@@ -183,7 +217,7 @@ export default function App() {
         <Ionicons
           name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
           size={27}
-          color={item.completed ? '#287D78' : '#A6AAA9'}
+          color={item.completed ? '#7952C7' : '#B7A8D5'}
         />
       </TouchableOpacity>
 
@@ -213,7 +247,7 @@ export default function App() {
             onPress={() => handleEdit(item)}
             disabled={saving}
           >
-            <Ionicons name="create-outline" size={16} color="#287D78" />
+            <Ionicons name="create-outline" size={16} color="#7952C7" />
             <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
 
@@ -222,159 +256,179 @@ export default function App() {
             onPress={() => handleDelete(item.id)}
             disabled={saving}
           >
-            <Ionicons name="trash-outline" size={16} color="#D65B5B" />
+            <Ionicons name="trash-outline" size={16} color="#D65B85" />
             <Text style={styles.deleteText}>Delete</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F1F8F6" />
+        <StatusBar barStyle="dark-content" backgroundColor="#F4F0FF" />
 
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          {/* App header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.appName}>StudyFlow</Text>
-              <Text style={styles.headerSubtitle}>
-                Plan your day, one task at a time.
-              </Text>
-            </View>
-
-            <View style={styles.headerIcon}>
-              <Ionicons name="school-outline" size={27} color="#287D78" />
-            </View>
-          </View>
-
-          {/* Task progress summary */}
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>My Study Progress</Text>
-
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>{tasks.length}</Text>
-                <Text style={styles.summaryLabel}>Total</Text>
-              </View>
-
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>{pendingCount}</Text>
-                <Text style={styles.summaryLabel}>Pending</Text>
-              </View>
-
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>{completedCount}</Text>
-                <Text style={styles.summaryLabel}>Completed</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Add or edit task form */}
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>
-              {editingId ? 'Edit Your Task' : 'Add New Task'}
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Enter task title"
-              placeholderTextColor="#A1AAA7"
-              value={title}
-              onChangeText={setTitle}
-              maxLength={60}
-            />
-
-            <TextInput
-              style={[styles.input, styles.descriptionInput]}
-              placeholder="Add a short description (optional)"
-              placeholderTextColor="#A1AAA7"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              maxLength={150}
-            />
-
-            <View style={styles.formButtons}>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name={editingId ? 'save-outline' : 'add-circle-outline'}
-                      size={19}
-                      color="#FFFFFF"
-                    />
-                    <Text style={styles.saveButtonText}>
-                      {editingId ? 'Update Task' : 'Add Task'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {editingId && (
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={clearForm}
-                  disabled={saving}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* Saved task list */}
-          <View style={styles.listHeader}>
-            <Text style={styles.listTitle}>My Tasks</Text>
-            <Text style={styles.listCount}>{tasks.length} tasks</Text>
-          </View>
-
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#287D78" />
-              <Text style={styles.loadingText}>Loading saved tasks...</Text>
+              <ActivityIndicator size="large" color="#7952C7" />
+              <Text style={styles.loadingText}>Loading your tasks...</Text>
             </View>
           ) : (
-            <FlatList
-              data={tasks}
-              keyExtractor={(item) => item.id}
-              renderItem={renderTask}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons
-                    name="clipboard-outline"
-                    size={55}
-                    color="#A4C8C1"
+            <>
+              <Animated.View
+                style={{
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }],
+                }}
+              >
+                {/* App header */}
+                <View style={styles.header}>
+                  <View>
+                    <Text style={styles.appName}>StudyFlow</Text>
+                    <Text style={styles.headerSubtitle}>
+                      Organize your tasks, achieve your goals.
+                    </Text>
+                  </View>
+
+                  <View style={styles.headerIcon}>
+                    <Ionicons
+                      name="school-outline"
+                      size={28}
+                      color="#7952C7"
+                    />
+                  </View>
+                </View>
+
+                {/* Task progress summary */}
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryTitle}>
+                    My Study Progress
+                  </Text>
+
+                  <View style={styles.summaryRow}>
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryNumber}>{tasks.length}</Text>
+                      <Text style={styles.summaryLabel}>Total</Text>
+                    </View>
+
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryNumber}>{pendingCount}</Text>
+                      <Text style={styles.summaryLabel}>Pending</Text>
+                    </View>
+
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryNumber}>{completedCount}</Text>
+                      <Text style={styles.summaryLabel}>Completed</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Add or edit task form */}
+                <View style={styles.formCard}>
+                  <Text style={styles.formTitle}>
+                    {editingId ? 'Edit Your Task' : 'Create New Task'}
+                  </Text>
+
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter task title"
+                    placeholderTextColor="#A99BC5"
+                    value={title}
+                    onChangeText={setTitle}
+                    maxLength={60}
                   />
-                  <Text style={styles.emptyTitle}>No Tasks Yet</Text>
-                  <Text style={styles.emptyText}>
-                    Add your first study task and start organizing your day.
+
+                  <TextInput
+                    style={[styles.input, styles.descriptionInput]}
+                    placeholder="Write a short description (optional)"
+                    placeholderTextColor="#A99BC5"
+                    value={description}
+                    onChangeText={setDescription}
+                    multiline
+                    maxLength={150}
+                  />
+
+                  <View style={styles.formButtons}>
+                    <TouchableOpacity
+                      style={styles.saveButton}
+                      onPress={handleSave}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name={editingId ? 'save-outline' : 'add-circle-outline'}
+                            size={19}
+                            color="#FFFFFF"
+                          />
+                          <Text style={styles.saveButtonText}>
+                            {editingId ? 'Update Task' : 'Add Task'}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+
+                    {editingId && (
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={clearForm}
+                        disabled={saving}
+                      >
+                        <Text style={styles.cancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                {/* Task list heading */}
+                <View style={styles.listHeader}>
+                  <Text style={styles.listTitle}>My Tasks</Text>
+                  <Text style={styles.listCount}>
+                    {tasks.length} tasks
                   </Text>
                 </View>
-              }
-            />
-          )}
+              </Animated.View>
 
-          {/* Saving status */}
-          {saving && (
-            <View style={styles.savingStatus}>
-              <ActivityIndicator size="small" color="#287D78" />
-              <Text style={styles.savingText}>Saving your changes...</Text>
-            </View>
+              {/* Saved task list */}
+              <FlatList
+                data={tasks}
+                keyExtractor={(item) => item.id}
+                renderItem={renderTask}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Ionicons
+                      name="clipboard-outline"
+                      size={55}
+                      color="#B9A8DE"
+                    />
+                    <Text style={styles.emptyTitle}>No Tasks Yet</Text>
+                    <Text style={styles.emptyText}>
+                      Add your first study task and start organizing your day.
+                    </Text>
+                  </View>
+                }
+              />
+
+              {/* Saving status */}
+              {saving && (
+                <View style={styles.savingStatus}>
+                  <ActivityIndicator size="small" color="#7952C7" />
+                  <Text style={styles.savingText}>
+                    Saving your changes...
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -382,11 +436,11 @@ export default function App() {
   );
 }
 
-// App design and layout styles
+// Purple theme and app layout styles
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F1F8F6',
+    backgroundColor: '#F4F0FF',
   },
   container: {
     flex: 1,
@@ -400,27 +454,27 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   appName: {
-    fontSize: 28,
+    fontSize: 29,
     fontWeight: 'bold',
-    color: '#287D78',
+    color: '#6542A5',
   },
   headerSubtitle: {
     fontSize: 12,
-    color: '#7C918C',
+    color: '#8879A8',
     marginTop: 4,
   },
   headerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: '#DCEFEA',
+    width: 49,
+    height: 49,
+    borderRadius: 16,
+    backgroundColor: '#E7DEFA',
     justifyContent: 'center',
     alignItems: 'center',
   },
   summaryCard: {
-    backgroundColor: '#287D78',
+    backgroundColor: '#7952C7',
     borderRadius: 18,
-    padding: 17,
+    padding: 18,
     marginBottom: 17,
   },
   summaryTitle: {
@@ -443,7 +497,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 11,
-    color: '#DCEFEA',
+    color: '#E8DFFC',
     marginTop: 3,
   },
   formCard: {
@@ -451,27 +505,27 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     padding: 15,
     marginBottom: 18,
-    elevation: 2,
-    shadowColor: '#244C45',
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    shadowColor: '#60458F',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   formTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#315D55',
+    color: '#60458F',
     marginBottom: 12,
   },
   input: {
-    backgroundColor: '#F5F9F7',
+    backgroundColor: '#F8F5FF',
     borderWidth: 1,
-    borderColor: '#E0ECE7',
+    borderColor: '#E5DCF7',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 13,
-    color: '#344B45',
+    color: '#44365F',
     marginBottom: 10,
   },
   descriptionInput: {
@@ -486,7 +540,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 43,
     borderRadius: 10,
-    backgroundColor: '#287D78',
+    backgroundColor: '#7952C7',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -502,10 +556,10 @@ const styles = StyleSheet.create({
     minHeight: 43,
     justifyContent: 'center',
     borderRadius: 10,
-    backgroundColor: '#EAF1EE',
+    backgroundColor: '#EEE8FA',
   },
   cancelText: {
-    color: '#526B63',
+    color: '#6542A5',
     fontSize: 13,
     fontWeight: 'bold',
   },
@@ -518,14 +572,14 @@ const styles = StyleSheet.create({
   listTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#315D55',
+    color: '#60458F',
   },
   listCount: {
     fontSize: 12,
-    color: '#7C918C',
+    color: '#8879A8',
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: 25,
     flexGrow: 1,
   },
   taskCard: {
@@ -535,9 +589,9 @@ const styles = StyleSheet.create({
     padding: 13,
     marginBottom: 11,
     elevation: 2,
-    shadowColor: '#244C45',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowColor: '#60458F',
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
   checkButton: {
@@ -550,20 +604,20 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#344B45',
+    color: '#44365F',
   },
   completedText: {
-    color: '#9AA8A2',
+    color: '#A99EBB',
     textDecorationLine: 'line-through',
   },
   taskDescription: {
     fontSize: 12,
-    color: '#7C918C',
+    color: '#8879A8',
     marginTop: 5,
   },
   taskDate: {
     fontSize: 10,
-    color: '#A1AAA7',
+    color: '#A99BC5',
     marginTop: 7,
   },
   taskActions: {
@@ -577,7 +631,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   editText: {
-    color: '#287D78',
+    color: '#7952C7',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -587,7 +641,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteText: {
-    color: '#D65B5B',
+    color: '#D65B85',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -600,12 +654,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#52766D',
+    color: '#6542A5',
     marginTop: 14,
   },
   emptyText: {
     fontSize: 12,
-    color: '#91A19B',
+    color: '#8879A8',
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 19,
@@ -616,7 +670,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
-    color: '#7C918C',
+    color: '#7952C7',
     fontSize: 12,
     marginTop: 10,
   },
@@ -629,6 +683,6 @@ const styles = StyleSheet.create({
   },
   savingText: {
     fontSize: 11,
-    color: '#287D78',
+    color: '#7952C7',
   },
 });
