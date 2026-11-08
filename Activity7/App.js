@@ -10,7 +10,10 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,41 +28,56 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Load saved tasks when the app starts
   useEffect(() => {
     loadTasks();
   }, []);
 
-  // Load saved tasks
+  // Read tasks from local storage
   const loadTasks = async () => {
     try {
       const savedData = await AsyncStorage.getItem(STORAGE_KEY);
+
       if (savedData !== null) {
         const parsedData = JSON.parse(savedData);
-        if (Array.isArray(parsedData)) setTasks(parsedData);
+
+        if (Array.isArray(parsedData)) {
+          setTasks(parsedData);
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'Unable to load saved tasks.');
+      Alert.alert('Error', 'Unable to load your saved tasks.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Save updated task list
+  // Save updated tasks to local storage
   const saveTasks = async (updatedTasks) => {
     try {
       setSaving(true);
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTasks));
+
+      const jsonData = JSON.stringify(updatedTasks);
+      await AsyncStorage.setItem(STORAGE_KEY, jsonData);
+
       setTasks(updatedTasks);
       return true;
     } catch (error) {
-      Alert.alert('Error', 'Unable to save tasks.');
+      Alert.alert('Error', 'Unable to save your tasks.');
       return false;
     } finally {
       setSaving(false);
     }
   };
 
-  // Add or update a task
+  // Clear the input fields
+  const clearForm = () => {
+    setTitle('');
+    setDescription('');
+    setEditingId(null);
+  };
+
+  // Create or update a task
   const handleSave = async () => {
     if (!title.trim()) {
       Alert.alert('Missing Title', 'Please enter a task title.');
@@ -73,7 +91,11 @@ export default function App() {
     if (editingId) {
       updatedTasks = tasks.map((task) =>
         task.id === editingId
-          ? { ...task, title: title.trim(), description: description.trim() }
+          ? {
+              ...task,
+              title: title.trim(),
+              description: description.trim(),
+            }
           : task
       );
     } else {
@@ -84,22 +106,18 @@ export default function App() {
         completed: false,
         createdAt: new Date().toLocaleDateString(),
       };
+
       updatedTasks = [newTask, ...tasks];
     }
 
-    if (await saveTasks(updatedTasks)) {
+    const success = await saveTasks(updatedTasks);
+
+    if (success) {
       clearForm();
     }
   };
 
-  // Clear the form
-  const clearForm = () => {
-    setTitle('');
-    setDescription('');
-    setEditingId(null);
-  };
-
-  // Edit an existing task
+  // Load task details into the form for editing
   const handleEdit = (task) => {
     setTitle(task.title);
     setDescription(task.description);
@@ -108,24 +126,34 @@ export default function App() {
 
   // Delete a task
   const handleDelete = (taskId) => {
-    Alert.alert('Delete Task', 'Do you want to delete this task?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (saving) return;
-          const updatedTasks = tasks.filter((task) => task.id !== taskId);
-          if (await saveTasks(updatedTasks) && editingId === taskId) {
-            clearForm();
-          }
+    Alert.alert(
+      'Delete Task',
+      'Are you sure you want to delete this task?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (saving) return;
+
+            const updatedTasks = tasks.filter(
+              (task) => task.id !== taskId
+            );
+
+            const success = await saveTasks(updatedTasks);
+
+            if (success && editingId === taskId) {
+              clearForm();
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
-  // Change task completion status
-  const toggleTask = async (taskId) => {
+  // Mark a task as completed or pending
+  const handleToggle = async (taskId) => {
     if (saving) return;
 
     const updatedTasks = tasks.map((task) =>
@@ -137,41 +165,64 @@ export default function App() {
     await saveTasks(updatedTasks);
   };
 
-  const completedCount = tasks.filter((task) => task.completed).length;
+  // Calculate task progress
+  const completedCount = tasks.filter(
+    (task) => task.completed
+  ).length;
+
   const pendingCount = tasks.length - completedCount;
 
-  // Display a task card
+  // Display each task
   const renderTask = ({ item }) => (
     <View style={styles.taskCard}>
       <TouchableOpacity
         style={styles.checkButton}
-        onPress={() => toggleTask(item.id)}
+        onPress={() => handleToggle(item.id)}
         disabled={saving}
       >
         <Ionicons
           name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
-          size={26}
+          size={27}
           color={item.completed ? '#287D78' : '#A6AAA9'}
         />
       </TouchableOpacity>
 
       <View style={styles.taskContent}>
-        <Text style={[styles.taskTitle, item.completed && styles.completedText]}>
+        <Text
+          style={[
+            styles.taskTitle,
+            item.completed && styles.completedText,
+          ]}
+        >
           {item.title}
         </Text>
 
         {!!item.description && (
-          <Text style={styles.taskDescription}>{item.description}</Text>
+          <Text style={styles.taskDescription}>
+            {item.description}
+          </Text>
         )}
 
-        <Text style={styles.taskDate}>Added: {item.createdAt}</Text>
+        <Text style={styles.taskDate}>
+          Added: {item.createdAt}
+        </Text>
 
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={() => handleEdit(item)} disabled={saving}>
+        <View style={styles.taskActions}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => handleEdit(item)}
+            disabled={saving}
+          >
+            <Ionicons name="create-outline" size={16} color="#287D78" />
             <Text style={styles.editText}>Edit</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => handleDelete(item.id)} disabled={saving}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDelete(item.id)}
+            disabled={saving}
+          >
+            <Ionicons name="trash-outline" size={16} color="#D65B5B" />
             <Text style={styles.deleteText}>Delete</Text>
           </TouchableOpacity>
         </View>
@@ -181,16 +232,22 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <StatusBar barStyle="dark-content" backgroundColor="#F1F8F6" />
 
-        <View style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           {/* App header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.appName}>StudyFlow</Text>
-              <Text style={styles.subtitle}>Plan your day, one task at a time.</Text>
+              <Text style={styles.headerSubtitle}>
+                Plan your day, one task at a time.
+              </Text>
             </View>
+
             <View style={styles.headerIcon}>
               <Ionicons name="school-outline" size={27} color="#287D78" />
             </View>
@@ -199,15 +256,18 @@ export default function App() {
           {/* Task progress summary */}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>My Study Progress</Text>
+
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>{tasks.length}</Text>
                 <Text style={styles.summaryLabel}>Total</Text>
               </View>
+
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>{pendingCount}</Text>
                 <Text style={styles.summaryLabel}>Pending</Text>
               </View>
+
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>{completedCount}</Text>
                 <Text style={styles.summaryLabel}>Completed</Text>
@@ -215,7 +275,7 @@ export default function App() {
             </View>
           </View>
 
-          {/* Task input form */}
+          {/* Add or edit task form */}
           <View style={styles.formCard}>
             <Text style={styles.formTitle}>
               {editingId ? 'Edit Your Task' : 'Add New Task'}
@@ -224,47 +284,67 @@ export default function App() {
             <TextInput
               style={styles.input}
               placeholder="Enter task title"
+              placeholderTextColor="#A1AAA7"
               value={title}
               onChangeText={setTitle}
+              maxLength={60}
             />
 
             <TextInput
               style={[styles.input, styles.descriptionInput]}
-              placeholder="Add a short description"
+              placeholder="Add a short description (optional)"
+              placeholderTextColor="#A1AAA7"
               value={description}
               onChangeText={setDescription}
               multiline
+              maxLength={150}
             />
 
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.saveButtonText}>
-                  {editingId ? 'Update Task' : 'Add Task'}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {editingId && (
-              <TouchableOpacity style={styles.cancelButton} onPress={clearForm}>
-                <Text style={styles.cancelText}>Cancel Editing</Text>
+            <View style={styles.formButtons}>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={editingId ? 'save-outline' : 'add-circle-outline'}
+                      size={19}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.saveButtonText}>
+                      {editingId ? 'Update Task' : 'Add Task'}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
-            )}
+
+              {editingId && (
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={clearForm}
+                  disabled={saving}
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
-          {/* Task list */}
+          {/* Saved task list */}
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>My Tasks</Text>
             <Text style={styles.listCount}>{tasks.length} tasks</Text>
           </View>
 
           {loading ? (
-            <ActivityIndicator size="large" color="#287D78" />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#287D78" />
+              <Text style={styles.loadingText}>Loading saved tasks...</Text>
+            </View>
           ) : (
             <FlatList
               data={tasks}
@@ -272,34 +352,46 @@ export default function App() {
               renderItem={renderTask}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Ionicons name="clipboard-outline" size={50} color="#A4C8C1" />
+                  <Ionicons
+                    name="clipboard-outline"
+                    size={55}
+                    color="#A4C8C1"
+                  />
                   <Text style={styles.emptyTitle}>No Tasks Yet</Text>
                   <Text style={styles.emptyText}>
-                    Add your first study task to get started.
+                    Add your first study task and start organizing your day.
                   </Text>
                 </View>
               }
             />
           )}
 
+          {/* Saving status */}
           {saving && (
             <View style={styles.savingStatus}>
               <ActivityIndicator size="small" color="#287D78" />
-              <Text style={styles.savingText}>Saving changes...</Text>
+              <Text style={styles.savingText}>Saving your changes...</Text>
             </View>
           )}
-        </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
-// Application styles
+// App design and layout styles
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F1F8F6' },
-  container: { flex: 1, paddingHorizontal: 18 },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#F1F8F6',
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 18,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -307,8 +399,16 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 18,
   },
-  appName: { fontSize: 28, fontWeight: 'bold', color: '#287D78' },
-  subtitle: { fontSize: 12, color: '#7C918C', marginTop: 4 },
+  appName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#287D78',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#7C918C',
+    marginTop: 4,
+  },
   headerIcon: {
     width: 48,
     height: 48,
@@ -321,70 +421,214 @@ const styles = StyleSheet.create({
     backgroundColor: '#287D78',
     borderRadius: 18,
     padding: 17,
+    marginBottom: 17,
+  },
+  summaryTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
     marginBottom: 15,
   },
-  summaryTitle: { fontSize: 15, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 15 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  summaryItem: { alignItems: 'center' },
-  summaryNumber: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
-  summaryLabel: { fontSize: 11, color: '#DCEFEA', marginTop: 3 },
-  formCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, marginBottom: 16 },
-  formTitle: { fontSize: 16, fontWeight: 'bold', color: '#315D55', marginBottom: 10 },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  summaryItem: {
+    alignItems: 'center',
+  },
+  summaryNumber: {
+    fontSize: 25,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#DCEFEA',
+    marginTop: 3,
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 17,
+    padding: 15,
+    marginBottom: 18,
+    elevation: 2,
+    shadowColor: '#244C45',
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  formTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#315D55',
+    marginBottom: 12,
+  },
   input: {
     backgroundColor: '#F5F9F7',
     borderWidth: 1,
     borderColor: '#E0ECE7',
     borderRadius: 10,
-    padding: 11,
-    marginBottom: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 13,
     color: '#344B45',
+    marginBottom: 10,
   },
-  descriptionInput: { minHeight: 55, textAlignVertical: 'top' },
+  descriptionInput: {
+    minHeight: 65,
+    textAlignVertical: 'top',
+  },
+  formButtons: {
+    flexDirection: 'row',
+    gap: 9,
+  },
   saveButton: {
-    backgroundColor: '#287D78',
-    padding: 12,
+    flex: 1,
+    minHeight: 43,
     borderRadius: 10,
-    alignItems: 'center',
+    backgroundColor: '#287D78',
+    flexDirection: 'row',
     justifyContent: 'center',
-    minHeight: 42,
+    alignItems: 'center',
+    gap: 7,
   },
-  saveButtonText: { color: '#FFFFFF', fontWeight: 'bold' },
-  cancelButton: { padding: 8, alignItems: 'center' },
-  cancelText: { color: '#7C918C', fontWeight: 'bold' },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  cancelButton: {
+    paddingHorizontal: 17,
+    minHeight: 43,
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#EAF1EE',
+  },
+  cancelText: {
+    color: '#526B63',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
   listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  listTitle: { fontSize: 18, fontWeight: 'bold', color: '#315D55' },
-  listCount: { fontSize: 12, color: '#7C918C' },
-  listContent: { paddingBottom: 20, flexGrow: 1 },
+  listTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#315D55',
+  },
+  listCount: {
+    fontSize: 12,
+    color: '#7C918C',
+  },
+  listContent: {
+    paddingBottom: 20,
+    flexGrow: 1,
+  },
   taskCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 13,
-    marginBottom: 10,
+    marginBottom: 11,
+    elevation: 2,
+    shadowColor: '#244C45',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-  checkButton: { paddingRight: 10, paddingTop: 2 },
-  taskContent: { flex: 1 },
-  taskTitle: { fontSize: 15, fontWeight: 'bold', color: '#344B45' },
-  completedText: { textDecorationLine: 'line-through', color: '#9AA8A2' },
-  taskDescription: { fontSize: 12, color: '#7C918C', marginTop: 5 },
-  taskDate: { fontSize: 10, color: '#A1AAA7', marginTop: 6 },
-  actions: { flexDirection: 'row', gap: 18, marginTop: 11 },
-  editText: { color: '#287D78', fontWeight: 'bold', fontSize: 12 },
-  deleteText: { color: '#D65B5B', fontWeight: 'bold', fontSize: 12 },
-  emptyContainer: { alignItems: 'center', padding: 25, marginTop: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: 'bold', color: '#52766D', marginTop: 10 },
-  emptyText: { fontSize: 12, color: '#91A19B', textAlign: 'center', marginTop: 5 },
+  checkButton: {
+    paddingTop: 2,
+    paddingRight: 10,
+  },
+  taskContent: {
+    flex: 1,
+  },
+  taskTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#344B45',
+  },
+  completedText: {
+    color: '#9AA8A2',
+    textDecorationLine: 'line-through',
+  },
+  taskDescription: {
+    fontSize: 12,
+    color: '#7C918C',
+    marginTop: 5,
+  },
+  taskDate: {
+    fontSize: 10,
+    color: '#A1AAA7',
+    marginTop: 7,
+  },
+  taskActions: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 12,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  editText: {
+    color: '#287D78',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  deleteText: {
+    color: '#D65B5B',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 25,
+    marginTop: 10,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#52766D',
+    marginTop: 14,
+  },
+  emptyText: {
+    fontSize: 12,
+    color: '#91A19B',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 19,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#7C918C',
+    fontSize: 12,
+    marginTop: 10,
+  },
   savingStatus: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 8,
     gap: 7,
   },
-  savingText: { fontSize: 11, color: '#287D78' },
+  savingText: {
+    fontSize: 11,
+    color: '#287D78',
+  },
 });
